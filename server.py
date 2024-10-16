@@ -1,15 +1,25 @@
 from os import remove
-import socket, time, console
+import socket, time
 from threading import Thread
 
-from packet import messagePacket, packet
+from packets.keepAlivePacket import keepAlivePacket
+from packets.configurationPacket import configurationPacket
+from packets.messagePacket import messagePacket
+from packets.disconnectPacket import disconnectPacket
+from packets.packet import packet
 
+from console import Console
+
+
+# SERVER CONFIG
 HOST = 'localhost'
 PORT = 5001
+DISCONNECTION_TIME = 5
 
+# VARIABLES
 CONNECTIONS = []
 DEAD_CONNECTIONS = []
-DISCONNECTION_TIME = 5
+console = Console()
 
 def checkIfAlive():
     for i in CONNECTIONS:
@@ -25,11 +35,10 @@ aliveDaemon = Thread(target=checkIfAlive)
 aliveDaemon.daemon = True
 aliveDaemon.start()
 
-console.log(f"server started on {HOST}:{PORT}")
-
 while True:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, PORT))
+        console.log(f"server started on {HOST}:{PORT}")
         s.listen()
         conn, addr = s.accept()
         isDead = False
@@ -84,7 +93,6 @@ while True:
                             if i[3] is not None:
                                 console.log("configuration packet ignored: already restored")
                             else:
-                                print(packetData)
                                 console.log("configuration packet recieved")
                                 username = packetData[1:packetData[0]+1].decode('utf-8')
                                 displayname = packetData[packetData[0]+2:].decode('utf-8')
@@ -97,6 +105,14 @@ while True:
                     # message packet from client - message
                     message = packetData[1:packetData[0]+1].decode('utf-8')
                     console.messageFromClient(message)
+
+                elif(packetName == b"disconnect"):
+                    for i in CONNECTIONS:
+                        if(i[0] == conn):
+                            console.log(f"{i[4]} is disconnecting")
+                            sendPacket(messagePacket(f"byebye"))
+                            DEAD_CONNECTIONS.append(i)
+                            CONNECTIONS.remove(i)
 
                 else:
                     console.log(f'received unknown data from {addr[0]}: {repr(data)}')
